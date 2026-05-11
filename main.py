@@ -1,42 +1,36 @@
-import telebot
-import requests
-import urllib.parse
+import asyncio
+import aiohttp
+from telebot.async_telebot import AsyncTeleBot
 
-# ضع التوكن الخاص بك هنا
-API_TOKEN = '7965345356:AAEiY2Q3UQ6WZvpFQAAmap0eebvLRvWXVuY'
-bot = telebot.TeleBot(API_TOKEN)
+BOT_TOKEN = "7965345356:AAEiY2Q3UQ6WZvpFQAAmap0eebvLRvWXVuY"
+GROQ_KEY = "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"
+bot = AsyncTeleBot(BOT_TOKEN)
 
-@bot.message_handler(func=lambda message: True)
-def handle_message(message):
-    user_input = message.text
-    
-    # تحويل النص ليكون صالحاً للروابط
-    query = urllib.parse.quote(user_input)
-    
-    # استخدمنا الرابط المباشر للموديل الافتراضي (أقل قيوداً)
-    api_url = f"https://text.pollinations.ai/{query}?model=search"
-    
-    try:
-        # أرسل الطلب بدون Headers معقدة (أحياناً تكون هي السبب في 403)
-        response = requests.get(api_url, timeout=30)
-        
-        if response.status_code == 200:
-            ai_reply = response.text.strip()
-            if ai_reply:
-                bot.reply_to(message, ai_reply)
+async def groq_async(prompt):
+    headers = {"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"}
+    json_data = {
+        "model": "llama3-8b-8192",
+        "messages": [{"role": "user", "content": prompt}]
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.post("https://api.groq.com/openai/v1/chat/completions",
+                                headers=headers, json=json_data, timeout=30) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                return data["choices"][0]["message"]["content"]
             else:
-                bot.reply_to(message, "الذكاء الاصطناعي أرسل رداً فارغاً.")
-        else:
-            # إذا استمرت 403، سنحاول تجربة رابط بديل فوراً داخل الكود
-            alt_url = f"https://text.pollinations.ai/{query}"
-            response_alt = requests.get(alt_url, timeout=30)
-            if response_alt.status_code == 200:
-                bot.reply_to(message, response_alt.text)
-            else:
-                bot.reply_to(message, f"الموقع يرفض الاتصال حالياً (403). حاول بعد قليل.")
-                
-    except Exception as e:
-        bot.reply_to(message, "فشل تقني في جلب الرد.")
+                return f"خطأ: {resp.status}"
+
+@bot.message_handler(func=lambda m: True)
+async def echo_all(message):
+    user_text = message.text
+    # رد مبدئي لإظهار أن البوت يكتب
+    await bot.send_chat_action(message.chat.id, 'typing')
+    response = await groq_async(user_text)
+    await bot.reply_to(message, response)
+
+async def main():
+    await bot.infinity_polling()
 
 if __name__ == "__main__":
-    bot.polling(none_stop=True)
+    asyncio.run(main())
