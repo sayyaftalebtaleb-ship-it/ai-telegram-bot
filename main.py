@@ -13,31 +13,30 @@ def handle_message(message):
     # تحويل النص ليكون صالحاً للروابط
     query = urllib.parse.quote(user_input)
     
-    # الرابط الجديد مع تحديد الموديل لضمان الاستجابة
-    api_url = f"https://text.pollinations.ai/{query}?model=openai&system=You are a helpful AI assistant"
+    # استخدمنا الرابط المباشر للموديل الافتراضي (أقل قيوداً)
+    api_url = f"https://text.pollinations.ai/{query}?model=search"
     
-    # إضافة Headers لخدع الموقع بأنه طلب من متصفح حقيقي
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    }
-
     try:
-        # محاولة جلب الرد
-        response = requests.get(api_url, headers=headers, timeout=30)
+        # أرسل الطلب بدون Headers معقدة (أحياناً تكون هي السبب في 403)
+        response = requests.get(api_url, timeout=30)
         
         if response.status_code == 200:
             ai_reply = response.text.strip()
             if ai_reply:
                 bot.reply_to(message, ai_reply)
             else:
-                bot.reply_to(message, "وصلني رد فارغ من الذكاء الاصطناعي، جرب سؤالاً آخر.")
+                bot.reply_to(message, "الذكاء الاصطناعي أرسل رداً فارغاً.")
         else:
-            # إذا فشل، سيخبرك البوت برقم الخطأ (مفيد جداً لنا)
-            bot.reply_to(message, f"فشل الاتصال. كود الخطأ: {response.status_code}")
-            
+            # إذا استمرت 403، سنحاول تجربة رابط بديل فوراً داخل الكود
+            alt_url = f"https://text.pollinations.ai/{query}"
+            response_alt = requests.get(alt_url, timeout=30)
+            if response_alt.status_code == 200:
+                bot.reply_to(message, response_alt.text)
+            else:
+                bot.reply_to(message, f"الموقع يرفض الاتصال حالياً (403). حاول بعد قليل.")
+                
     except Exception as e:
-        bot.reply_to(message, f"حدث خطأ تقني: {str(e)}")
+        bot.reply_to(message, "فشل تقني في جلب الرد.")
 
 if __name__ == "__main__":
-    print("البوت يعمل الآن بأعلى كفاءة...")
     bot.polling(none_stop=True)
